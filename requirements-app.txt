@@ -1,0 +1,9 @@
+# Application dependencies
+vllm==0.9.1
+gradio
+gradio_image_annotation
+PyMuPDF
+openai
+qwen_vl_utils
+huggingface_hub
+modelscope

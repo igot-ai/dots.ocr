@@ -1,18 +1,23 @@
-# FastAPI and web framework dependencies
-vllm==0.9.1
+# Complete list of all project dependencies
+# NOTE: For Docker builds, use split requirements files (requirements-*.txt) for proper installation order
+# This file serves as a complete reference of all dependencies
 
+# Base ML dependencies (requirements-base.txt)
 torch==2.7.0
 torchvision==0.22.0
 torchaudio==2.7.0
+transformers==4.51.3
+accelerate
 
-# streamlit
+# Flash attention (requirements-flash.txt) - requires torch to be pre-installed
+flash-attn==2.8.0.post2
+
+# Application dependencies (requirements-app.txt)
+vllm==0.9.1
 gradio
 gradio_image_annotation
 PyMuPDF
 openai
 qwen_vl_utils
-transformers==4.51.3
 huggingface_hub
 modelscope
-flash-attn==2.8.0.post2
-accelerate

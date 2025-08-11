@@ -1,0 +1,2 @@
+# Flash attention (requires torch to be pre-installed)
+flash-attn==2.8.0.post2

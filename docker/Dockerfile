@@ -67,12 +67,20 @@ RUN useradd --create-home --shell /bin/bash app && \
 # Set working directory
 WORKDIR /app
 
-# Copy requirements first for better Docker layer caching
-COPY requirements.txt .
+# Copy requirements files for better Docker layer caching
+COPY requirements*.txt ./
 
-# Install Python dependencies with explicit CUDA 12.4 support
-RUN python3.11 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    python3.11 -m pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies in correct order
+RUN python3.11 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install base dependencies first (PyTorch, etc.)
+RUN python3.11 -m pip install --no-cache-dir -r requirements-base.txt
+
+# Install flash-attn separately (requires torch to be available during build)
+RUN python3.11 -m pip install --no-cache-dir -r requirements-flash.txt
+
+# Install remaining application dependencies
+RUN python3.11 -m pip install --no-cache-dir -r requirements-app.txt
 
 # Copy application code first
 COPY . .
