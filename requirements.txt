@@ -1,4 +1,11 @@
-# streamlit 
+# FastAPI and web framework dependencies
+vllm==0.9.1
+
+torch==2.7.0
+torchvision==0.22.0
+torchaudio==2.7.0
+
+# streamlit
 gradio
 gradio_image_annotation
 PyMuPDF
