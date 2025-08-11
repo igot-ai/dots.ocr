@@ -1,5 +1,5 @@
 # Use NVIDIA CUDA base image for GPU support (compatible with host CUDA 12.9)
-FROM nvidia/cuda:12.6.0-devel-ubuntu20.04
+FROM nvidia/cuda:12.6.0-devel-ubuntu22.04
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -15,16 +15,15 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     gnupg2 \
     ca-certificates \
+    wget \
+    curl \
+    build-essential \
     && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y \
     python3.12 \
     python3.12-dev \
-    python3.12-distutils \
     python3.12-venv \
     git \
-    wget \
-    curl \
-    build-essential \
     libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
@@ -52,10 +51,10 @@ RUN apt-get update && apt-get install -y \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1
 
-# Install pip for Python 3.12
-RUN wget https://bootstrap.pypa.io/get-pip.py \
-    && python3.12 get-pip.py \
-    && rm get-pip.py
+# Install additional Python packages and pip for Python 3.12
+RUN apt-get update && apt-get install -y python3.12-distutils || true \
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user and add to sudo group
 RUN useradd --create-home --shell /bin/bash app && \
