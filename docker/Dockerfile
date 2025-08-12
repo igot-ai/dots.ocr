@@ -14,6 +14,12 @@ ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/nvidia/lib:/usr/local/nvidi
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
+# vLLM platform detection environment variables
+ENV VLLM_USE_TRITON=1
+ENV VLLM_TARGET_DEVICE=cuda
+ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
+ENV CUDA_VISIBLE_DEVICES=0
+
 # Install additional CUDA development tools and system dependencies
 RUN apt-get update && apt-get install -y \
     software-properties-common \
@@ -26,6 +32,10 @@ RUN apt-get update && apt-get install -y \
     vim \
     nano \
     sudo \
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-venv \
     poppler-utils \
     tesseract-ocr \
     libtesseract-dev \
@@ -39,6 +49,11 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     libgcc-s1 \
     && rm -rf /var/lib/apt/lists/*
+
+# Create python symlink if it doesn't exist and verify Python installation
+RUN if [ ! -f /usr/bin/python ]; then ln -s /usr/bin/python3 /usr/bin/python; fi && \
+    python3 --version && \
+    python3 -m pip --version
 
 # Ensure CUDA development tools are available (if not already present)
 RUN apt-get update && apt-get install -y \
@@ -59,10 +74,15 @@ WORKDIR /app
 COPY requirements*.txt ./
 
 # Update pip and install additional dependencies
-RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install base dependencies first if requirements-base.txt exists
+RUN if [ -f requirements-base.txt ]; then \
+        python3 -m pip install --no-cache-dir -r requirements-base.txt; \
+    fi
 
 # Install additional application dependencies from requirements.txt
-RUN python -m pip install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
