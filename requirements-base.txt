@@ -1,6 +1,6 @@
 # Base dependencies that must be installed first
-torch==2.7.0+cu128
-torchvision==0.22.0+cu128
-torchaudio==2.7.0+cu128
+torch==2.7.0
+torchvision==0.22.0
+torchaudio==2.7.0
 transformers==4.51.3
 accelerate
