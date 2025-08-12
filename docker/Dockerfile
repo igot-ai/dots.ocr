@@ -84,14 +84,16 @@ RUN python3.12 -m pip install --no-cache-dir -r requirements-flash.txt
 # Install remaining application dependencies
 RUN python3.12 -m pip install --no-cache-dir -r requirements-app.txt
 
-sed -i '/^from vllm\.entrypoints\.cli\.main import main$/a\
-from DotsOCR import modeling_dots_ocr_vllm'
 # Copy application code first
 COPY . .
 
 # Create necessary directories as root with proper structure
 RUN chown -R app:app /app && \
     chmod -R 755 /app
+
+# Register DotsOCR model with vLLM (must be done after model weights are available)
+RUN sed -i '/^from vllm\.entrypoints\.cli\.main import main$/a\
+from DotsOCR import modeling_dots_ocr_vllm' $(python3.12 -c "import vllm; print(vllm.__file__.replace('__init__.py', 'entrypoints/cli/main.py'))")
 
 # Create a script for package installation (if needed)
 RUN echo '#!/bin/bash\n\
