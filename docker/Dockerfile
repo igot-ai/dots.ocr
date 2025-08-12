@@ -84,13 +84,9 @@ COPY requirements*.txt ./
 # Update pip and install additional dependencies
 RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install base dependencies first if requirements-base.txt exists
-RUN if [ -f requirements-base.txt ]; then \
-        python3 -m pip install --no-cache-dir -r requirements-base.txt; \
-    fi
 
 # Install vLLM with CUDA support
-RUN python3 -m pip install --no-cache-dir vllm
+RUN python3 -m pip install --no-cache-dir vllm==0.9.1 transformers==4.51.3
 
 # Install additional application dependencies from requirements.txt
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
