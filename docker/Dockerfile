@@ -1,4 +1,13 @@
-# Use NVIDIA CUDA base image for GPU support (compatible with host CUDA 12.9)
+# ==============================================================================
+# Multi-stage Dockerfile combining:
+# 1. rednotehilab/dots.ocr:vllm-openai-v0.9.1 (for pre-built vLLM and OCR components)
+# 2. nvidia/cuda:12.6.0-devel-ubuntu22.04 (for CUDA development environment)
+# ==============================================================================
+
+# Stage 1: Source image with pre-built dots.ocr and vLLM components
+FROM rednotehilab/dots.ocr:vllm-openai-v0.9.1 AS dots_ocr_source
+
+# Stage 2: Main build based on NVIDIA CUDA for GPU support
 FROM nvidia/cuda:12.6.0-devel-ubuntu22.04
 
 # Set environment variables
@@ -72,16 +81,17 @@ COPY requirements*.txt ./
 # Install Python dependencies in correct order
 RUN python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install base dependencies first (PyTorch, etc.)
-RUN python3.12 -m pip install --no-cache-dir -r requirements-base.txt
+# Copy Python packages from dots.ocr source image if available
+COPY --from=dots_ocr_source /usr/local/lib/python*/site-packages/ /usr/local/lib/python3.12/site-packages/ || true
 
-# Install flash-attn separately (requires torch to be available during build)
-RUN python3.12 -m pip install --no-cache-dir -r requirements-flash.txt
 
-# Install remaining application dependencies
-RUN python3.12 -m pip install --no-cache-dir -r requirements-app.txt
+# Install remaining application dependencies (vllm==0.9.1 should match source image)
+RUN python3.12 -m pip install --no-cache-dir -r requirements.txt
 
-# Copy application code first
+# Copy pre-built components from dots.ocr source image (if any exist)
+COPY --from=dots_ocr_source /app/ /app/dots_ocr_base/ || true
+
+# Copy application code
 COPY . .
 
 # Create necessary directories as root with proper structure
