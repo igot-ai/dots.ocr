@@ -7,4 +7,4 @@ openai
 qwen_vl_utils
 huggingface_hub
 modelscope
-flashinfer-python
+flashinfer-python>=0.2.3
