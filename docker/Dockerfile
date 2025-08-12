@@ -1,26 +1,39 @@
 # ==============================================================================
-# Dockerfile based on rednotehilab/dots.ocr:vllm-openai-v0.9.1
-# with additional CUDA development tools from nvidia/cuda:12.6.0-devel-ubuntu22.04
+# Multi-stage Dockerfile combining nvidia/cuda:12.6.0-devel-ubuntu22.04 
+# with rednotehilab/dots.ocr:vllm-openai-v0.9.1 components
 # ==============================================================================
 
-FROM rednotehilab/dots.ocr:vllm-openai-v0.9.1
+# Stage 1: Extract components from dots.ocr image
+FROM rednotehilab/dots.ocr:vllm-openai-v0.9.1 AS dots_ocr_source
+
+# Stage 2: Build final image on NVIDIA CUDA base
+FROM nvidia/cuda:12.6.0-devel-ubuntu22.04
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
-ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/nvidia/lib:/usr/local/nvidia/lib64
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64/stubs
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+ENV PATH=/usr/local/cuda/bin:${PATH}
 
 # vLLM platform detection environment variables
 ENV VLLM_USE_TRITON=1
 ENV VLLM_TARGET_DEVICE=cuda
 ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
 ENV CUDA_VISIBLE_DEVICES=0
+ENV CUDA_DEVICE_ORDER=PCI_BUS_ID
 
-# Install additional CUDA development tools and system dependencies
+# Copy Python environment and installed packages from dots.ocr image
+COPY --from=dots_ocr_source /usr/local /usr/local
+COPY --from=dots_ocr_source /opt /opt
+
+# Copy any models and weights from the source image
+COPY --from=dots_ocr_source /app /app_source
+
+# Install system dependencies and CUDA runtime
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     gnupg2 \
@@ -48,17 +61,20 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     libgomp1 \
     libgcc-s1 \
+    nvidia-utils-545 \
+    libnvidia-compute-545 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create python symlink if it doesn't exist and verify Python installation
+# Create python symlink and verify installations
 RUN if [ ! -f /usr/bin/python ]; then ln -s /usr/bin/python3 /usr/bin/python; fi && \
     python3 --version && \
     python3 -m pip --version
 
-# Ensure CUDA development tools are available (if not already present)
-RUN apt-get update && apt-get install -y \
-    cuda-toolkit-12-6 || true \
-    && rm -rf /var/lib/apt/lists/*
+# Verify CUDA installation and create necessary symlinks
+RUN ldconfig && \
+    ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
+    echo "/usr/local/cuda/lib64/stubs" > /etc/ld.so.conf.d/cuda-stubs.conf && \
+    ldconfig
 
 # Create app user if it doesn't exist, or update existing user
 RUN id -u app >/dev/null 2>&1 || useradd --create-home --shell /bin/bash app && \
@@ -70,11 +86,16 @@ RUN id -u app >/dev/null 2>&1 || useradd --create-home --shell /bin/bash app && 
 # Set working directory
 WORKDIR /app
 
+# Copy pre-existing models and weights from source image
+RUN if [ -d /app_source ]; then \
+        cp -r /app_source/* /app/ 2>/dev/null || true; \
+    fi
+
 # Copy requirements files for better Docker layer caching
 COPY requirements*.txt ./
 
 # Update pip and install additional dependencies
-RUN python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Install base dependencies first if requirements-base.txt exists
 RUN if [ -f requirements-base.txt ]; then \
@@ -84,12 +105,18 @@ RUN if [ -f requirements-base.txt ]; then \
 # Install additional application dependencies from requirements.txt
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code (this will override any existing files)
 COPY . .
 
 # Create necessary directories as root with proper structure
 RUN chown -R app:app /app && \
     chmod -R 755 /app
+
+# Verify CUDA and GPU detection
+RUN echo "Verifying CUDA installation..." && \
+    nvcc --version && \
+    nvidia-smi || echo "nvidia-smi not available (expected in build, will work at runtime)" && \
+    python3 -c "import torch; print(f'PyTorch CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda if torch.cuda.is_available() else \"Not available\"}')" || echo "PyTorch verification will be done after pip install"
 
 # Create a script for package installation (if needed)
 RUN echo '#!/bin/bash\n\
