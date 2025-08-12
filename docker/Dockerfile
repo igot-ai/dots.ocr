@@ -92,9 +92,9 @@ RUN chown -R app:app /app && \
     chmod -R 755 /app
 
 # Register DotsOCR model with vLLM (must be done after model weights are available)
-RUN VLLM_MAIN_PATH=$(python3.12 -c "import sys, os; sys.stderr = open(os.devnull, 'w'); import vllm; print(vllm.__file__.replace('__init__.py', 'entrypoints/cli/main.py'))" 2>/dev/null) && \
-    sed -i '/^from vllm\.entrypoints\.cli\.main import main$/a\
-from DotsOCR import modeling_dots_ocr_vllm' "$VLLM_MAIN_PATH"
+RUN sed -i '/^from vllm\.entrypoints\.cli\.main import main$/a\
+from DotsOCR import modeling_dots_ocr_vllm' $(which vllm) && \
+    echo 'vllm script after patch:'
 
 # Create a script for package installation (if needed)
 RUN echo '#!/bin/bash\n\
