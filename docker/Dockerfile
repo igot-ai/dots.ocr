@@ -69,9 +69,6 @@ WORKDIR /app
 # Copy requirements files for better Docker layer caching
 COPY requirements*.txt ./
 
-ENV hf_model_path=./model/weights/DotsOCR
-ENV PYTHONPATH=$hf_model_path:$PYTHONPATH
-
 # Install Python dependencies in correct order
 RUN python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
@@ -90,6 +87,10 @@ COPY . .
 # Create necessary directories as root with proper structure
 RUN chown -R app:app /app && \
     chmod -R 755 /app
+
+ENV hf_model_path=./model/weights/DotsOCR
+# Update PYTHONPATH to include model directory for DotsOCR import
+ENV PYTHONPATH=/app/model/weights:$PYTHONPATH
 
 # Register DotsOCR model with vLLM (must be done after model weights are available)
 RUN sed -i '/^from vllm\.entrypoints\.cli\.main import main$/a\
