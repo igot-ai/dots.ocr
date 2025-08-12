@@ -88,8 +88,8 @@ COPY . .
 RUN chown -R app:app /app && \
     chmod -R 755 /app
 
-ENV hf_model_path=./model/weights/DotsOCR
-# Update PYTHONPATH to include model directory for DotsOCR import
+ENV hf_model_path=/app/model/weights/DotsOCR
+# Update PYTHONPATH to include parent directory of DotsOCR for proper import
 ENV PYTHONPATH=/app/model/weights:$PYTHONPATH
 
 # Register DotsOCR model with vLLM (must be done after model weights are available)
