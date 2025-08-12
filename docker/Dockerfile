@@ -1,12 +1,8 @@
 # ==============================================================================
-# Multi-stage Dockerfile combining nvidia/cuda:12.6.0-devel-ubuntu22.04 
-# with rednotehilab/dots.ocr:vllm-openai-v0.9.1 components
+# Dockerfile based on nvidia/cuda:12.6.0-devel-ubuntu22.04 
+# for proper CUDA support and GPU detection in vLLM
 # ==============================================================================
 
-# Stage 1: Extract components from dots.ocr image
-FROM rednotehilab/dots.ocr:vllm-openai-v0.9.1 AS dots_ocr_source
-
-# Stage 2: Build final image on NVIDIA CUDA base
 FROM nvidia/cuda:12.6.0-devel-ubuntu22.04
 
 # Set environment variables
@@ -26,12 +22,8 @@ ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
 ENV CUDA_VISIBLE_DEVICES=0
 ENV CUDA_DEVICE_ORDER=PCI_BUS_ID
 
-# Copy Python environment and installed packages from dots.ocr image
-COPY --from=dots_ocr_source /usr/local /usr/local
-COPY --from=dots_ocr_source /opt /opt
-
-# Copy any models and weights from the source image
-COPY --from=dots_ocr_source /app /app_source
+# Note: We'll install packages fresh instead of copying from source image
+# This ensures compatibility with the new CUDA base image
 
 # Install system dependencies and CUDA runtime
 RUN apt-get update && apt-get install -y \
@@ -86,11 +78,6 @@ RUN id -u app >/dev/null 2>&1 || useradd --create-home --shell /bin/bash app && 
 # Set working directory
 WORKDIR /app
 
-# Copy pre-existing models and weights from source image
-RUN if [ -d /app_source ]; then \
-        cp -r /app_source/* /app/ 2>/dev/null || true; \
-    fi
-
 # Copy requirements files for better Docker layer caching
 COPY requirements*.txt ./
 
@@ -101,6 +88,9 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN if [ -f requirements-base.txt ]; then \
         python3 -m pip install --no-cache-dir -r requirements-base.txt; \
     fi
+
+# Install vLLM with CUDA support
+RUN python3 -m pip install --no-cache-dir vllm
 
 # Install additional application dependencies from requirements.txt
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
