@@ -1,8 +1,4 @@
-# ==============================================================================
-# Dockerfile based on nvidia/cuda:12.6.0-devel-ubuntu22.04 
-# for proper CUDA support and GPU detection in vLLM
-# ==============================================================================
-
+# Use NVIDIA CUDA base image for GPU support (compatible with host CUDA 12.9)
 FROM nvidia/cuda:12.6.0-devel-ubuntu22.04
 
 # Set environment variables
@@ -10,22 +6,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
-ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64/stubs
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/nvidia/lib:/usr/local/nvidia/lib64
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
-ENV PATH=/usr/local/cuda/bin:${PATH}
 
-# vLLM platform detection environment variables
-ENV VLLM_USE_TRITON=1
-ENV VLLM_TARGET_DEVICE=cuda
-ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
-ENV CUDA_VISIBLE_DEVICES=0
-ENV CUDA_DEVICE_ORDER=PCI_BUS_ID
-
-# Note: We'll install packages fresh instead of copying from source image
-# This ensures compatibility with the new CUDA base image
-
-# Install system dependencies and CUDA runtime
+# Install system dependencies and Python 3.12
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     gnupg2 \
@@ -33,19 +18,12 @@ RUN apt-get update && apt-get install -y \
     wget \
     curl \
     build-essential \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.12 \
+    python3.12-dev \
+    python3.12-venv \
     git \
-    vim \
-    nano \
-    sudo \
-    python3 \
-    python3-pip \
-    python3-dev \
-    python3-venv \
-    poppler-utils \
-    tesseract-ocr \
-    libtesseract-dev \
-    libleptonica-dev \
-    pkg-config \
     libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
@@ -53,23 +31,33 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     libgomp1 \
     libgcc-s1 \
-    nvidia-utils-545 \
-    libnvidia-compute-545 \
+    sudo \
+    vim \
+    nano \
+    poppler-utils \
+    tesseract-ocr \
+    libtesseract-dev \
+    libleptonica-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Create python symlink and verify installations
-RUN if [ ! -f /usr/bin/python ]; then ln -s /usr/bin/python3 /usr/bin/python; fi && \
-    python3 --version && \
-    python3 -m pip --version
+# Install NVIDIA utilities (nvidia-smi) matching host driver version 575.x
+RUN apt-get update && apt-get install -y \
+    nvidia-utils-575 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/local/cuda/lib64/libcudart.so.12 /usr/local/cuda/lib64/libcudart.so
 
-# Verify CUDA installation and create necessary symlinks
-RUN ldconfig && \
-    ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
-    echo "/usr/local/cuda/lib64/stubs" > /etc/ld.so.conf.d/cuda-stubs.conf && \
-    ldconfig
+# Set python3.12 as default python3
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1
 
-# Create app user if it doesn't exist, or update existing user
-RUN id -u app >/dev/null 2>&1 || useradd --create-home --shell /bin/bash app && \
+# Install additional Python packages and pip for Python 3.12
+RUN apt-get update && apt-get install -y python3.12-distutils || true \
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user and add to sudo group
+RUN useradd --create-home --shell /bin/bash app && \
     usermod -aG sudo app && \
     echo "app ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
     echo "Defaults env_keep += \"DEBIAN_FRONTEND\"" >> /etc/sudoers && \
@@ -81,28 +69,29 @@ WORKDIR /app
 # Copy requirements files for better Docker layer caching
 COPY requirements*.txt ./
 
-# Update pip and install additional dependencies
-RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+ENV hf_model_path=./model/weights/DotsOCR
+ENV PYTHONPATH=$hf_model_path:$PYTHONPATH
 
+# Install Python dependencies in correct order
+RUN python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install vLLM with CUDA support
-RUN python3 -m pip install --no-cache-dir vllm==0.9.1 transformers==4.51.3
+# Install base dependencies first (PyTorch, etc.)
+RUN python3.12 -m pip install --no-cache-dir -r requirements-base.txt
 
-# Install additional application dependencies from requirements.txt
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+# Install flash-attn separately (requires torch to be available during build)
+RUN python3.12 -m pip install --no-cache-dir -r requirements-flash.txt
 
-# Copy application code (this will override any existing files)
+# Install remaining application dependencies
+RUN python3.12 -m pip install --no-cache-dir -r requirements-app.txt
+
+sed -i '/^from vllm\.entrypoints\.cli\.main import main$/a\
+from DotsOCR import modeling_dots_ocr_vllm'
+# Copy application code first
 COPY . .
 
 # Create necessary directories as root with proper structure
 RUN chown -R app:app /app && \
     chmod -R 755 /app
-
-# Verify CUDA and GPU detection
-RUN echo "Verifying CUDA installation..." && \
-    nvcc --version && \
-    nvidia-smi || echo "nvidia-smi not available (expected in build, will work at runtime)" && \
-    python3 -c "import torch; print(f'PyTorch CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda if torch.cuda.is_available() else \"Not available\"}')" || echo "PyTorch verification will be done after pip install"
 
 # Create a script for package installation (if needed)
 RUN echo '#!/bin/bash\n\
