@@ -1,5 +1,5 @@
 # Application dependencies
-vllm==0.9.1
+vllm==0.9.0
 gradio
 gradio_image_annotation
 PyMuPDF
