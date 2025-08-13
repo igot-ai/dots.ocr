@@ -92,10 +92,9 @@ ENV hf_model_path=/app/model/weights/DotsOCR
 # Update PYTHONPATH to include parent directory of DotsOCR for proper import
 ENV PYTHONPATH=/app/model/weights:$PYTHONPATH
 
-# Copy and setup entrypoint script and vLLM wrapper
-COPY docker/entrypoint.sh /usr/local/bin/start-vllm.sh
-COPY docker/vllm_wrapper.py /app/docker/vllm_wrapper.py
-RUN chmod +x /usr/local/bin/start-vllm.sh
+# Setup entrypoint script (already copied with COPY . .)
+RUN cp /app/docker/entrypoint.sh /usr/local/bin/start-vllm.sh && \
+    chmod +x /usr/local/bin/start-vllm.sh
 
 # Create a script for package installation (if needed)
 RUN echo '#!/bin/bash\n\
