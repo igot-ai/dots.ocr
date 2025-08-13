@@ -12,19 +12,23 @@ if [ ! -d "/app/model/weights/DotsOCR" ]; then
     exit 1
 fi
 
-echo "DotsOCR model found, registering with vLLM..."
-# Register DotsOCR model with vLLM if not already done
-VLLM_SCRIPT=$(which vllm)
+echo "Preloading DotsOCR and launching vLLM..."
 
-if ! grep -q "from DotsOCR import modeling_dots_ocr_vllm" "$VLLM_SCRIPT"; then
-    echo "Registering DotsOCR with vLLM..."
-    sudo sed -i "/^from vllm\.entrypoints\.cli\.main import main$/a\\
-from DotsOCR import modeling_dots_ocr_vllm" "$VLLM_SCRIPT"
-    echo "DotsOCR registered with vLLM successfully"
-else
-    echo "DotsOCR already registered with vLLM"
-fi
+# Run vLLM via a lightweight Python wrapper that pre-imports DotsOCR
+exec python3 - "$@" << 'PY'
+import sys
+import traceback
 
-# Launch vLLM server with provided arguments
-echo "Launching vLLM server..."
-exec vllm "$@"
+try:
+    # Ensure DotsOCR is importable from PYTHONPATH
+    from DotsOCR import modeling_dots_ocr_vllm  # noqa: F401
+except Exception as exc:
+    print("ERROR: Failed to import DotsOCR (check PYTHONPATH and mount path)", file=sys.stderr)
+    traceback.print_exc()
+    sys.exit(1)
+
+from vllm.entrypoints.cli.main import main
+# sys.argv will be ['-'] + original args; replace with a proper program name
+sys.argv = ["vllm"] + sys.argv[1:]
+main()
+PY
