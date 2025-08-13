@@ -92,22 +92,36 @@ ENV hf_model_path=/app/model/weights/DotsOCR
 # Update PYTHONPATH to include parent directory of DotsOCR for proper import
 ENV PYTHONPATH=/app/model/weights:$PYTHONPATH
 
-# Check if DotsOCR directory exists and register with vLLM
-RUN echo "Checking DotsOCR model directory..." && \
-    echo "PYTHONPATH: $PYTHONPATH" && \
-    echo "hf_model_path: $hf_model_path" && \
-    ls -la /app/model/ || echo "No /app/model/ directory" && \
-    ls -la /app/model/weights/ || echo "No /app/model/weights/ directory" && \
-    ls -la /app/model/weights/DotsOCR/ || echo "No /app/model/weights/DotsOCR/ directory" && \
-    if [ -d "/app/model/weights/DotsOCR" ]; then \
-        echo "DotsOCR directory found, registering with vLLM..." && \
-        sed -i '/^from vllm\.entrypoints\.cli\.main import main$/a\
-from DotsOCR import modeling_dots_ocr_vllm' $(which vllm) && \
-        echo 'vllm script patched successfully'; \
-    else \
-        echo "WARNING: DotsOCR directory not found at /app/model/weights/DotsOCR"; \
-        echo "vLLM registration skipped - you will need to mount the model directory in K8s"; \
-    fi
+# Create startup script for vLLM with DotsOCR registration
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+echo "Starting DotsOCR vLLM server..."\n\
+echo "PYTHONPATH: $PYTHONPATH"\n\
+echo "hf_model_path: $hf_model_path"\n\
+\n\
+# Check if DotsOCR model is mounted\n\
+if [ ! -d "/app/model/weights/DotsOCR" ]; then\n\
+    echo "ERROR: DotsOCR model directory not found at /app/model/weights/DotsOCR"\n\
+    echo "Please ensure the model is properly mounted via K8s storage"\n\
+    exit 1\n\
+fi\n\
+\n\
+echo "DotsOCR model found, registering with vLLM..."\n\
+# Register DotsOCR model with vLLM at runtime\n\
+if ! grep -q "from DotsOCR import modeling_dots_ocr_vllm" $(which vllm); then\n\
+    sed -i "/^from vllm\\.entrypoints\\.cli\\.main import main$/a\\\n\
+from DotsOCR import modeling_dots_ocr_vllm" $(which vllm)\n\
+    echo "DotsOCR registered with vLLM successfully"\n\
+else\n\
+    echo "DotsOCR already registered with vLLM"\n\
+fi\n\
+\n\
+# Launch vLLM server with provided arguments\n\
+echo "Launching vLLM server..."\n\
+exec vllm "$@"\n\
+' > /usr/local/bin/start-vllm.sh && \
+    chmod +x /usr/local/bin/start-vllm.sh
 
 # Create a script for package installation (if needed)
 RUN echo '#!/bin/bash\n\
@@ -124,6 +138,12 @@ USER app
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
+
+# Set the entrypoint to use our startup script
+ENTRYPOINT ["/usr/local/bin/start-vllm.sh"]
+
+# Default command for vLLM serve
+CMD ["serve", "/app/model/weights/DotsOCR", "--tensor-parallel-size", "1", "--gpu-memory-utilization", "0.95", "--chat-template-content-format", "string", "--served-model-name", "model", "--trust-remote-code"]
 
 # Expose port
 EXPOSE 8000
