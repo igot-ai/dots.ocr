@@ -14,21 +14,5 @@ fi
 
 echo "Preloading DotsOCR and launching vLLM..."
 
-# Run vLLM via a lightweight Python wrapper that pre-imports DotsOCR
-exec python3 - "$@" << 'PY'
-import sys
-import traceback
-
-try:
-    # Ensure DotsOCR is importable from PYTHONPATH
-    from DotsOCR import modeling_dots_ocr_vllm  # noqa: F401
-except Exception as exc:
-    print("ERROR: Failed to import DotsOCR (check PYTHONPATH and mount path)", file=sys.stderr)
-    traceback.print_exc()
-    sys.exit(1)
-
-from vllm.entrypoints.cli.main import main
-# sys.argv will be ['-'] + original args; replace with a proper program name
-sys.argv = ["vllm"] + sys.argv[1:]
-main()
-PY
+# Run vLLM via our Python wrapper that pre-imports DotsOCR
+exec python3 /app/docker/vllm_wrapper.py "$@"
