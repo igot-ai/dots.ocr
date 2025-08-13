@@ -92,10 +92,22 @@ ENV hf_model_path=/app/model/weights/DotsOCR
 # Update PYTHONPATH to include parent directory of DotsOCR for proper import
 ENV PYTHONPATH=/app/model/weights:$PYTHONPATH
 
-# Register DotsOCR model with vLLM (must be done after model weights are available)
-RUN sed -i '/^from vllm\.entrypoints\.cli\.main import main$/a\
+# Check if DotsOCR directory exists and register with vLLM
+RUN echo "Checking DotsOCR model directory..." && \
+    echo "PYTHONPATH: $PYTHONPATH" && \
+    echo "hf_model_path: $hf_model_path" && \
+    ls -la /app/model/ || echo "No /app/model/ directory" && \
+    ls -la /app/model/weights/ || echo "No /app/model/weights/ directory" && \
+    ls -la /app/model/weights/DotsOCR/ || echo "No /app/model/weights/DotsOCR/ directory" && \
+    if [ -d "/app/model/weights/DotsOCR" ]; then \
+        echo "DotsOCR directory found, registering with vLLM..." && \
+        sed -i '/^from vllm\.entrypoints\.cli\.main import main$/a\
 from DotsOCR import modeling_dots_ocr_vllm' $(which vllm) && \
-    echo 'vllm script after patch:'
+        echo 'vllm script patched successfully'; \
+    else \
+        echo "WARNING: DotsOCR directory not found at /app/model/weights/DotsOCR"; \
+        echo "vLLM registration skipped - you will need to mount the model directory in K8s"; \
+    fi
 
 # Create a script for package installation (if needed)
 RUN echo '#!/bin/bash\n\
