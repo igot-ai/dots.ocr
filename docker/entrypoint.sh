@@ -14,5 +14,13 @@ fi
 
 echo "Preloading DotsOCR and launching vLLM..."
 
+# Debug: Check what files exist
+echo "Contents of /app:"
+ls -la /app/
+echo "Contents of /app/docker (if exists):"
+ls -la /app/docker/ || echo "No /app/docker directory"
+echo "Looking for vllm_wrapper.py:"
+find /app -name "vllm_wrapper.py" -type f || echo "vllm_wrapper.py not found anywhere"
+
 # Run vLLM via our Python wrapper that pre-imports DotsOCR
 exec python3 /app/docker/vllm_wrapper.py "$@"
