@@ -23,4 +23,4 @@ echo "Looking for vllm_wrapper.py:"
 find /app -name "vllm_wrapper.py" -type f || echo "vllm_wrapper.py not found anywhere"
 
 # Run vLLM via our Python wrapper that pre-imports DotsOCR
-exec python3 /app/docker/vllm_wrapper.py "$@"
+exec python3 /usr/local/bin/vllm_wrapper.py "$@"
